@@ -213,13 +213,28 @@ func (s *Server) handleViewQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 
+//TODO at some point, add queue mechanism (redis?) in between submitting games and acquiring jobs
+func (s *Server) requestForAnalysis(w http.ResponseWriter, r *http.Request) {
+	/*
+		steps
+		1) deserialize game 
+		2) parse game into moves
+		2b) associate moves with some batchId (so when the moves get analyzed we have a place to record results)
+		3) push moves (as work) to job queue 
+	*/
+}
+
+
 // StartServer starts the HTTP server
 func (s *Server) StartServer(addr string) {
 	http.HandleFunc("/job", s.handleGetJob)
 	http.HandleFunc("/result", s.handleSubmitResult)
 	http.HandleFunc("/analyze", s.handleAnalyze)
 	http.HandleFunc("/get_result", s.handleGetResult)
-	http.HandleFunc("/queue", s.handleViewQueue) // TODO implement
+	http.HandleFunc("/queue", s.handleViewQueue)
+	http.handleFunc("/requestForAnalysis", s.requestForAnalysis)
+
+
 
 	log.Printf("Starting server on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
