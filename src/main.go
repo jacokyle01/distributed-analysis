@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/corentings/chess"
 )
 
 // Job represents a chess position analysis job
@@ -235,15 +236,19 @@ func (s *Server) requestForAnalysis(w http.ResponseWriter, r *http.Request) {
 
 	// parse PGN (pgn --> game)
 
-	reader := strings.NewReader(req.Pgn)
-	scanner := NewScanner(reader)
-	game, err := scanner.ParseNext()
+	// reader := strings.NewReader(req.Pgn)
+	// scanner := chess.NewScanner(reader)
+	scanner := chess.NewScanner(strings.NewReader("d4"))
+	game := scanner.Next()
+	positions := game.Positions()
 
-	if err != nil {
-		t.Fatalf("fail to read games from valid pgn: %s", err.Error())
+	for _, pos := range positions {
+		fmt.Println(pos.String())
 	}
 
-
+	// if err != nil {
+	// 	// t.Fatalf("fail to read games from valid pgn: %s", err.Error())
+	// }
 
 }
 
@@ -254,7 +259,7 @@ func (s *Server) StartServer(addr string) {
 	http.HandleFunc("/analyze", s.handleAnalyze)
 	http.HandleFunc("/get_result", s.handleGetResult)
 	http.HandleFunc("/queue", s.handleViewQueue)
-	http.HandleFunc("/requestForAnalysis", s.requestForAnalysis)
+	http.HandleFunc("/newJob", s.requestForAnalysis)
 
 	log.Printf("Starting server on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
