@@ -1,7 +1,7 @@
 //TODO run fishnet locally
 // TODO api /queue to monitor queue
 
-//TODO how do we piece analyzed moves back together? 
+//TODO how do we piece analyzed moves back together?
 
 package main
 
@@ -212,18 +212,40 @@ func (s *Server) handleViewQueue(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
-
-//TODO at some point, add queue mechanism (redis?) in between submitting games and acquiring jobs
+// TODO at some point, add queue mechanism (redis?) in between submitting games and acquiring jobs
 func (s *Server) requestForAnalysis(w http.ResponseWriter, r *http.Request) {
 	/*
 		steps
-		1) deserialize game 
+		1) deserialize game
 		2) parse game into moves
 		2b) associate moves with some batchId (so when the moves get analyzed we have a place to record results)
-		3) push moves (as work) to job queue 
+		3) push moves (as work) to job queue
 	*/
-}
 
+	// create request struct
+	var req struct {
+		Pgn string `json:"pgn"` // e.g. "e4 e5 Nf3 Nf6"
+	}
+
+	// deserialize request, fill request body 
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), 400)
+		return
+	}
+
+	// parse PGN (pgn --> game)
+
+	reader := strings.NewReader(req.Pgn)
+	scanner := NewScanner(reader)
+	game, err := scanner.ParseNext()
+
+	if err != nil {
+		t.Fatalf("fail to read games from valid pgn: %s", err.Error())
+	}
+
+
+
+}
 
 // StartServer starts the HTTP server
 func (s *Server) StartServer(addr string) {
@@ -232,9 +254,7 @@ func (s *Server) StartServer(addr string) {
 	http.HandleFunc("/analyze", s.handleAnalyze)
 	http.HandleFunc("/get_result", s.handleGetResult)
 	http.HandleFunc("/queue", s.handleViewQueue)
-	http.handleFunc("/requestForAnalysis", s.requestForAnalysis)
-
-
+	http.HandleFunc("/requestForAnalysis", s.requestForAnalysis)
 
 	log.Printf("Starting server on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
