@@ -438,7 +438,7 @@ func (c *Client) processJob() {
 		time.Sleep(2 * time.Second)
 		return
 	}
-
+	// testing
 	var job Job
 	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
 		log.Printf("Error decoding job: %v", err)
