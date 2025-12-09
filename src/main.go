@@ -17,6 +17,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -42,7 +43,16 @@ func main() {
 
 	case "client":
 		serverURL := "http://localhost:8080"
-		enginePath := "../stockfish/stockfish-ubuntu-x86-64-avx512" // Assumes stockfish is in PATH
+		enginePath := ""
+
+		switch runtime.GOOS {
+		case "windows":
+			enginePath = "../stockfish/stockfish-windows-x86-64-avx2.exe"
+		case "linux":
+			enginePath = "../stockfish/stockfish-ubuntu-x86-64-avx512"
+		default:
+			log.Fatal("Unsupported OS: ", runtime.GOOS)
+		}
 
 		if len(os.Args) > 2 {
 			serverURL = os.Args[2]
