@@ -1,7 +1,7 @@
 package models
 
 // Job represents a chess position analysis job
-// right now jobs are just a FEN, we can possibly make them larger, that is, parts of a PGN
+// right now jobs are just a FEN, which is one chess move
 // TODO
 type Job struct {
 	ID       string `json:"id"`

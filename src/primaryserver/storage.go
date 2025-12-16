@@ -32,11 +32,3 @@ func (s *Server) SubmitResult(result models.Result) {
 	log.Printf("Received result for job %s: %s (eval: %d)",
 		result.JobID, result.BestMove, result.Eval)
 }
-
-// // GetResult retrieves a result by job ID
-// func (s *Server) GetResult(jobID string) (models.Result, bool) {
-// 	s.mu.RLock()
-// 	defer s.mu.RUnlock()
-// 	result, exists := s.results_store[jobID]
-// 	return result, exists
-// }

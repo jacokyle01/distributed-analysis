@@ -28,8 +28,6 @@ func NewServer() *Server {
 func (s *Server) StartServer(addr string) {
 	http.HandleFunc("/job", s.handleGetJob)
 	http.HandleFunc("/result", s.handleSubmitResult)
-	// http.HandleFunc("/analyze", s.handleAnalyze)
-	//http.HandleFunc("/get_result", s.handleGetResult)
 	http.HandleFunc("/batch", s.handleGetBatch)
 	http.HandleFunc("/queue", s.handleViewQueue)
 	http.HandleFunc("/requestForAnalysis", s.requestForAnalysis)

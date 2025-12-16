@@ -77,68 +77,6 @@ func (s *Server) handleSubmitResult(w http.ResponseWriter, r *http.Request) {
 	s.SubmitResult(result)
 	w.WriteHeader(http.StatusOK)
 }
-// func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method != "POST" {
-// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-// 		return
-// 	}
-
-// 	var job models.Job
-// 	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
-// 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	if job.ID == "" {
-// 		job.ID = fmt.Sprintf("job_%d", time.Now().UnixNano())
-// 	}
-// 	if job.Depth == 0 {
-// 		job.Depth = 15
-// 	}
-// 	if job.TimeMS == 0 {
-// 		job.TimeMS = 5000
-// 	}
-
-// 	// 🔍 Console log (Go equivalent of console.log)
-// 	log.Printf(
-// 		"[ANALYZE] received job id=%s fen=%q depth=%d timeMS=%d priority=%d",
-// 		job.ID,
-// 		job.FEN,
-// 		job.Depth,
-// 		job.TimeMS,
-// 		job.Priority,
-// 	)
-
-// 	s.AddJob(job)
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(map[string]string{
-// 		"job_id": job.ID,
-// 	})
-// }
-
-
-// func (s *Server) handleGetResult(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method != "GET" {
-// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-// 		return
-// 	}
-
-// 	jobID := r.URL.Query().Get("job_id")
-// 	if jobID == "" {
-// 		http.Error(w, "Missing job_id parameter", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	result, exists := s.GetResult(jobID)
-// 	if !exists {
-// 		w.WriteHeader(http.StatusNotFound)
-// 		return
-// 	}
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(result)
-// }
 
 func (s *Server) handleViewQueue(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
@@ -261,7 +199,6 @@ func clamp01(x float64) float64 {
 }
 
 func accuracyFromAvgLoss(avgLoss float64) float64 {
-	// Tunable constant: larger = more forgiving
 	const scale = 80.0
 	return 100.0 * math.Exp(-avgLoss/scale)
 }
@@ -324,15 +261,14 @@ func (s *Server) handleBatchAccuracy(w http.ResponseWriter, r *http.Request) {
 	// Sort by move index
 	sort.Slice(evals, func(a, b int) bool { return evals[a].i < evals[b].i })
 
-	// Build normalized eval array E[i] in White perspective.
-	// NOTE: this assumes move_0 is White to move (normal chess start).
+	// flip black evals 
 	E := make(map[int]float64, len(evals))
 	for _, p := range evals {
 		raw := float64(p.raw)
 		if p.i%2 == 0 {
-			E[p.i] = raw       // white to move => already white perspective
+			E[p.i] = raw       
 		} else {
-			E[p.i] = -raw      // black to move => flip to white perspective
+			E[p.i] = -raw      
 		}
 	}
 
@@ -341,8 +277,6 @@ func (s *Server) handleBatchAccuracy(w http.ResponseWriter, r *http.Request) {
 	var whiteMoves int
 	var blackMoves int
 
-	// Compute losses using consecutive positions:
-	// move i changes eval from E[i] (before move i) to E[i+1] (before move i+1)
 	for i := 0; i < batch.Total-1; i++ {
 		eBefore, ok1 := E[i]
 		eAfter, ok2 := E[i+1]
@@ -351,12 +285,10 @@ func (s *Server) handleBatchAccuracy(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if i%2 == 0 {
-			// White moved: good if eval goes up; loss if it goes down
 			loss := math.Max(0, eBefore-eAfter)
 			whiteLossSum += loss
 			whiteMoves++
 		} else {
-			// Black moved: good if eval goes down; loss if it goes up
 			loss := math.Max(0, eAfter-eBefore)
 			blackLossSum += loss
 			blackMoves++

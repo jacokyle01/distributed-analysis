@@ -1,5 +1,7 @@
 package models
 
+// represents completed analysis work 
+// once completed, we can get accuracy of a batch 
 type Batch struct {
 	ID        string            `json:"id"`
 	JobIDs    []string          `json:"job_ids"`
