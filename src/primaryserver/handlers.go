@@ -6,6 +6,11 @@ import (
 	"net/http"
 	"src/models"
 	"time"
+	"math"
+		"regexp"
+	"sort"
+	"strconv"
+	// "log"
 
 	"github.com/notnil/chess"
 )
@@ -72,34 +77,46 @@ func (s *Server) handleSubmitResult(w http.ResponseWriter, r *http.Request) {
 	s.SubmitResult(result)
 	w.WriteHeader(http.StatusOK)
 }
+// func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
+// 	if r.Method != "POST" {
+// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// 		return
+// 	}
 
-func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// 	var job models.Job
+// 	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+// 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+// 		return
+// 	}
 
-	var job models.Job
-	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
+// 	if job.ID == "" {
+// 		job.ID = fmt.Sprintf("job_%d", time.Now().UnixNano())
+// 	}
+// 	if job.Depth == 0 {
+// 		job.Depth = 15
+// 	}
+// 	if job.TimeMS == 0 {
+// 		job.TimeMS = 5000
+// 	}
 
-	if job.ID == "" {
-		job.ID = fmt.Sprintf("job_%d", time.Now().UnixNano())
-	}
-	if job.Depth == 0 {
-		job.Depth = 15
-	}
-	if job.TimeMS == 0 {
-		job.TimeMS = 5000
-	}
+// 	// 🔍 Console log (Go equivalent of console.log)
+// 	log.Printf(
+// 		"[ANALYZE] received job id=%s fen=%q depth=%d timeMS=%d priority=%d",
+// 		job.ID,
+// 		job.FEN,
+// 		job.Depth,
+// 		job.TimeMS,
+// 		job.Priority,
+// 	)
 
-	s.AddJob(job)
+// 	s.AddJob(job)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"job_id": job.ID})
-}
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(map[string]string{
+// 		"job_id": job.ID,
+// 	})
+// }
+
 
 // func (s *Server) handleGetResult(w http.ResponseWriter, r *http.Request) {
 // 	if r.Method != "GET" {
@@ -212,7 +229,7 @@ func (s *Server) requestForAnalysis(w http.ResponseWriter, r *http.Request) {
 		job := models.Job{
 			ID:       jobID,
 			FEN:      fen,
-			Depth:    15,
+			Depth:    25,
 			TimeMS:   5000,
 			Priority: 0,
 		}
@@ -232,3 +249,149 @@ func (s *Server) requestForAnalysis(w http.ResponseWriter, r *http.Request) {
 		"move_count": len(moves),
 	})
 }
+
+func clamp01(x float64) float64 {
+	if x < 0 {
+		return 0
+	}
+	if x > 1 {
+		return 1
+	}
+	return x
+}
+
+func accuracyFromAvgLoss(avgLoss float64) float64 {
+	// Tunable constant: larger = more forgiving
+	const scale = 80.0
+	return 100.0 * math.Exp(-avgLoss/scale)
+}
+
+// GET /batch/accuracy?batch_id=...
+func (s *Server) handleBatchAccuracy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	batchID := r.URL.Query().Get("batch_id")
+	if batchID == "" {
+		http.Error(w, "missing batch_id", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.RLock()
+	batch, ok := s.batches[batchID]
+	s.mu.RUnlock()
+	if !ok {
+		http.Error(w, "batch not found", http.StatusNotFound)
+		return
+	}
+
+	// Ensure completed
+	if batch.Completed < batch.Total {
+		http.Error(w, "batch not completed yet", http.StatusConflict)
+		return
+	}
+
+	// Extract move index from job IDs like: batch_xxx_move_5
+	re := regexp.MustCompile(`_move_(\d+)$`)
+
+	type pair struct {
+		i   int
+		raw int // raw eval from your stored result (side-to-move perspective)
+	}
+
+	var evals []pair
+	s.mu.RLock()
+	for jobID, res := range batch.Results {
+		m := re.FindStringSubmatch(jobID)
+		if len(m) != 2 {
+			continue
+		}
+		idx, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		evals = append(evals, pair{i: idx, raw: res.Eval})
+	}
+	s.mu.RUnlock()
+
+	if len(evals) < 2 {
+		http.Error(w, "not enough eval data to compute accuracy", http.StatusUnprocessableEntity)
+		return
+	}
+
+	// Sort by move index
+	sort.Slice(evals, func(a, b int) bool { return evals[a].i < evals[b].i })
+
+	// Build normalized eval array E[i] in White perspective.
+	// NOTE: this assumes move_0 is White to move (normal chess start).
+	E := make(map[int]float64, len(evals))
+	for _, p := range evals {
+		raw := float64(p.raw)
+		if p.i%2 == 0 {
+			E[p.i] = raw       // white to move => already white perspective
+		} else {
+			E[p.i] = -raw      // black to move => flip to white perspective
+		}
+	}
+
+	var whiteLossSum float64
+	var blackLossSum float64
+	var whiteMoves int
+	var blackMoves int
+
+	// Compute losses using consecutive positions:
+	// move i changes eval from E[i] (before move i) to E[i+1] (before move i+1)
+	for i := 0; i < batch.Total-1; i++ {
+		eBefore, ok1 := E[i]
+		eAfter, ok2 := E[i+1]
+		if !ok1 || !ok2 {
+			continue
+		}
+
+		if i%2 == 0 {
+			// White moved: good if eval goes up; loss if it goes down
+			loss := math.Max(0, eBefore-eAfter)
+			whiteLossSum += loss
+			whiteMoves++
+		} else {
+			// Black moved: good if eval goes down; loss if it goes up
+			loss := math.Max(0, eAfter-eBefore)
+			blackLossSum += loss
+			blackMoves++
+		}
+	}
+
+	if whiteMoves == 0 && blackMoves == 0 {
+		http.Error(w, "could not compute accuracy from available eval pairs", http.StatusUnprocessableEntity)
+		return
+	}
+
+	var whiteAvgLoss float64
+	var blackAvgLoss float64
+	if whiteMoves > 0 {
+		whiteAvgLoss = whiteLossSum / float64(whiteMoves)
+	}
+	if blackMoves > 0 {
+		blackAvgLoss = blackLossSum / float64(blackMoves)
+	}
+
+	resp := map[string]any{
+		"batch_id":        batchID,
+		"white_accuracy":  accuracyFromAvgLoss(whiteAvgLoss),
+		"black_accuracy":  accuracyFromAvgLoss(blackAvgLoss),
+		"white_avg_cpl":   whiteAvgLoss, // centipawn loss
+		"black_avg_cpl":   blackAvgLoss,
+		"white_moves":     whiteMoves,
+		"black_moves":     blackMoves,
+		"note":            "Eval normalized to White perspective; CPL uses eval change between consecutive plies.",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, fmt.Sprintf("encode error: %v", err), http.StatusInternalServerError)
+		return
+	}
+}
+

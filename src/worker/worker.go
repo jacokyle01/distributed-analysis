@@ -67,7 +67,7 @@ func (c *Client) processJob() {
 		return
 	}
 
-	log.Printf("Processing job %s: %s", job.ID, job.FEN)
+	log.Printf("Processing job %s: %s with depth %d", job.ID, job.FEN, job.Depth)
 
 	// Analyze position
 	result, err := c.engine.AnalyzePosition(job.FEN, job.Depth, job.TimeMS)

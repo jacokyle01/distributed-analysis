@@ -17,9 +17,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
+	// "runtime"
 	"time"
-	"github.com/corentings/chess"
 )
 
 // Example usage and main function
@@ -44,16 +43,16 @@ func main() {
 
 	case "client":
 		serverURL := "http://localhost:8080"
-		enginePath := ""
+		enginePath := "../stockfish/src/stockfish"
 
-		switch runtime.GOOS {
-		case "windows":
-			enginePath = "../stockfish/stockfish-windows-x86-64-avx2.exe"
-		case "linux":
-			enginePath = "../stockfish/stockfish-ubuntu-x86-64-avx512"
-		default:
-			log.Fatal("Unsupported OS: ", runtime.GOOS)
-		}
+		// switch runtime.GOOS {
+		// case "windows":
+		// 	enginePath = "../stockfish/stockfish-windows-x86-64-avx2.exe"
+		// case "linux":
+		// 	enginePath = "../stockfish/stockfish-ubuntu-x86-64-avx512"
+		// default:
+		// 	log.Fatal("Unsupported OS: ", runtime.GOOS)
+		// }
 
 		if len(os.Args) > 2 {
 			serverURL = os.Args[2]
