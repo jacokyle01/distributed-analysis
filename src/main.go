@@ -43,7 +43,7 @@ func main() {
 
 	case "client":
 		serverURL := "http://localhost:8080"
-		enginePath := "../stockfish/src/stockfish"
+		enginePath := "./stockfish"
 
 		// switch runtime.GOOS {
 		// case "windows":
